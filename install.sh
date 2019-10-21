@@ -85,6 +85,7 @@ if [[ $SQLPORT != '3306' ]]; then
   MYSQLOPTS="$MYSQLOPTS --port=$SQLPORT"
 fi
 
+VARIANT=`mysql $MYSQLOPTS --execute "SELECT CASE WHEN version() REGEXP 'MariaDB' = 1 THEN 'MariaDB' WHEN version() REGEXP 'Percona' = 1 THEN 'Percona' ELSE 'MySQL' END"`;
 MYVER1=`mysql $MYSQLOPTS --execute "SELECT @@global.version" | awk -F'-' '{print $1}' | awk -F'.' '{print $1 * 100000 }'`;
 MYVER2=`mysql $MYSQLOPTS --execute "SELECT @@global.version" | awk -F'-' '{print $1}' | awk -F'.' '{print $2 * 1000 }'`;
 MYVER3=`mysql $MYSQLOPTS --execute "SELECT @@global.version" | awk -F'-' '{print $1}' | awk -F'.' '{print $3}'`;
@@ -119,23 +120,35 @@ if [[ $NOINSTALL -eq 0 ]]; then
     mysql $MYSQLOPTS --execute 'source ./mytap-partition.sql';
     mysql $MYSQLOPTS --execute 'source ./mytap-privilege.sql';
 
-    if [[ $MYVER -ge 506004 ]]; then
-       echo "Importing Version 5.6.4 patches";
-       mysql $MYSQLOPTS --execute 'source ./mytap-table-564.sql';
-    fi
+    if [[ $VARIANT == 'MySQL' ]]; then
+      if [[ $MYVER -ge 506004 ]]; then
+         echo "Importing Version 5.6.4 patches";
+         mysql $MYSQLOPTS --execute 'source ./mytap-table-564.sql';
+      fi
 
-    if [[ $MYVER -ge 507006 ]]; then
-       echo "Importing Version 5.7.6 patches";
-       mysql $MYSQLOPTS --execute 'source ./mytap-table-576.sql';
-       mysql $MYSQLOPTS --execute 'source ./mytap-global-576.sql';
-       mysql $MYSQLOPTS --execute 'source ./mytap-user-576.sql';
-    fi
+      if [[ $MYVER -ge 507006 ]]; then
+         echo "Importing Version 5.7.6 patches";
+         mysql $MYSQLOPTS --execute 'source ./mytap-table-576.sql';
+         mysql $MYSQLOPTS --execute 'source ./mytap-global-576.sql';
+         mysql $MYSQLOPTS --execute 'source ./mytap-user-576.sql';
+      fi
 
-    if [[ $MYVER -ge 800011 ]]; then
-       echo "Importing Version 8.0.11 patches";
-       mysql $MYSQLOPTS --execute 'source ./mytap-role-8011.sql';
-       mysql $MYSQLOPTS --execute 'source ./mytap-table-8011.sql';
-    fi
+      if [[ $MYVER -ge 800011 ]]; then
+         echo "Importing Version 8.0.11 patches";
+         mysql $MYSQLOPTS --execute 'source ./mytap-role-8011.sql';
+         mysql $MYSQLOPTS --execute 'source ./mytap-table-8011.sql';
+      fi
+   fi
+
+   if [[ $VARIANT == 'MariaDB' ]]; then
+      if [[ $MYVER -ge 1000005 ]]; then
+         echo "Importing Version 10.0.5 patches";
+         mysql $MYSQLOPTS --execute 'source ./mariadb/mytap-role-1005.sql';
+      fi
+   fi
+
+
+
 fi
 
 if [[ $NOTESTS -eq 0 ]]; then
@@ -219,9 +232,13 @@ if [[ $NOTESTS -eq 0 ]]; then
 
    if [[ $FILTER == 0 ]] || [[ $FILTER =~ "role" ]]; then
       echo "============= role ============"
-      mysql $MYSQLOPTS --database tap --execute 'source tests/test-mytap-role.my'
+      if [[ $VARIANT == 'MariaDB' ]] ; then
+        echo "Running mariadb variant test"
+        mysql $MYSQLOPTS --database tap --execute 'source tests/mariadb-mytap-role.my'
+      else  
+        mysql $MYSQLOPTS --database tap --execute 'source tests/test-mytap-role.my'
+      fi
    fi
-
    if [[ $FILTER == 0 ]] || [[ $FILTER =~ "routines" ]]; then
       echo "============= routines ============"
       mysql $MYSQLOPTS --database tap --execute 'source tests/test-mytap-routines.my'
